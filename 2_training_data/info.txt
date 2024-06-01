@@ -1,0 +1,1 @@
+provide all training data in different file in such a way that any file size shold not more then 50 MB

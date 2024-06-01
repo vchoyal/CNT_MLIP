@@ -1,0 +1,1 @@
+provide all types of LAMMPS file only input file

@@ -1,0 +1,1 @@
+provide some one one example of all type of vasp calculation only 3 INPUT file, INCAR, KPOINT, POSCAR. and One file only POTCAR infomation not POTCAR file, like in file name will be <POTCAR_info> and inside the file just type C
