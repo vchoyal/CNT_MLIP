@@ -1,0 +1,108 @@
+# clear
+#processors 2 2 3
+#timer timeout 0 every 1              # skip run check your code before run #
+shell mkdir output/${fld}
+variable sim string output/${fld}
+# ------------------------ INITIALIZATION ----------------------------
+units 		metal
+dimension	3
+boundary	s s p
+atom_style	atomic
+timestep 0.001
+variable T equal 300
+
+# ----------------------- ATOM DEFINITION ----------------------------
+read_data data/${fld}.data
+
+# ------------------------ FORCE FIELDS ------------------------------
+pair_style mlip load_from=pot.almtp #for mlip-3
+pair_coeff * *
+
+
+# ------------------------- SETTINGS ---------------------------------
+compute peratom all pe/atom
+compute 2 all stress/atom NULL
+compute mytemp all temp
+compute s1 all reduce sum c_2[1] # xx
+compute s2 all reduce sum c_2[2] # yy
+compute s3 all reduce sum c_2[3] # zz
+compute s6 all reduce sum c_2[4] # xy
+compute s5 all reduce sum c_2[5] # xz
+compute s4 all reduce sum c_2[6] # yz
+
+######################################
+
+log ${sim}/log.lammps
+
+# ------------------------- EQUILIBRATION ---------------------------------
+minimize 1.0e-10 1.0e-10 100000 100000
+velocity all create 300 48455
+reset_timestep	0
+
+# Set thermo output
+thermo 1000
+thermo_style custom step lx ly lz press pxx pyy pzz pe temp
+
+dump mydmp all atom 1000 ${sim}/Eq.lammpstrj
+# fix mynvt all nvt temp ${T} ${T} $(100*dt)
+fix 1 all npt temp 300 300 1 z 0 0 1 drag 1
+run 50000
+unfix 1
+
+fix 1 all npt temp ${T} ${T} 1 z 0 0 1 drag 1
+run 50000
+unfix 1
+undump mydmp
+reset_timestep	0
+# ------------------------- DEFORMATION ---------------------------------
+variable tmp equal "lx*ly*3.34"
+variable vol0 equal ${tmp}
+print "Initial volume, vol0: ${vol0}"
+
+variable tmp equal "lx*ly*lz"
+variable vol1 equal ${tmp}
+print "Cell Initial volume, vol1: ${vol1}"
+
+variable tmp equal "lz"
+variable L0 equal ${tmp}
+print "Initial Length, L0: ${L0}"
+
+#####
+
+fix 1 all nvt temp ${T} ${T} $(100*dt)
+# fix 1 all npt temp 300 300 $(100*dt) z 0 0 1 drag 1
+variable srate equal 1.0e9 # 1/s
+variable srate1 equal "v_srate / 1.0e12" # 1/ps ie 0.001 /ps
+fix 2 all deform 1 z erate ${srate1} units box remap x
+
+# Output strain and stress info to file
+# for units metal, pressure is in [bars] = 100 [kPa] = 1/10000 [GPa]
+# p2, p3, p4 are in GPa
+variable strain equal "(lz - v_L0)/v_L0"
+variable p1 equal "v_strain"
+variable p2 equal "-pxx/10000"
+variable p3 equal "-pyy/10000"
+variable p4 equal "-pzz/10000"
+variable p5 equal "-pxy/10000"
+variable p6 equal "-pxz/10000"
+variable p7 equal "-pyz/10000"
+variable volBox equal "lx*ly*3.34"
+variable volCell equal "lx*ly*lz"
+variable poteng equal "pe"
+
+fix def2 all print 500 "${p1} ${p2} ${p3} ${p4} ${p5} ${p6} ${p7} $(lz) ${volCell} ${poteng}" file ${sim}/stress_strain_100.out screen no
+fix def3 all ave/time 10 10 100 v_p1 v_p4 v_poteng file ${sim}/avg_StrainStress.out
+# Use cfg for AtomEye
+dump mydmp all atom 1000 ${sim}/dump.lammpstrj
+
+# Display thermo
+thermo 	500
+thermo_style custom step v_strain temp v_p2 v_p3 v_p4 ke pe press
+
+run		300000 # 300 ps
+unfix def2
+unfix def3
+undump mydmp
+######################################
+# SIMULATION DONE
+print "All done"
