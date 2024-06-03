@@ -1,0 +1,67 @@
+print "Author: Dr. Vijay Choyal"
+print "Date: Nov 20, 2022"
+processors 2 2 2
+shell mkdir output/${fld}
+variable sim string output/${fld}
+#------Initialize simulation---------------------------------------------------
+units metal
+boundary p p p
+dimension 3
+atom_style atomic
+log ${sim}/log.lammps 
+#-----------Atom defination----------------------------------------------------
+region box block -40 40 -40 40 -0.614012 41.1388
+create_box 1 box        # 3 is type of atoms or molecules in the box
+read_data data/${fld}.pos add append
+mass 1 12.01
+
+#--------Define variable---------------------------------------------------------
+variable etol equal 10e-10   #use var ${etol}
+variable ftol equal 10e-10
+variable maxiter equal 1000
+variable maxeval equal 1000
+variable natoms equal "count(all)"
+variable TotE equal "c_speatom"
+variable Lx equal "lx"
+variable Ly equal "ly"
+variable Lz equal "lz"
+variable t equal time
+variable T equal temp
+variable p equal press
+variable PE equal pe
+variable KE equal ke
+variable E equal etotal
+variable dmax equal 0.02
+variable Temp equal 300.0
+variable Eq_run equal 10000
+
+#---------Define interatomic potential
+# pair_style  mlip mlip.ini    #for mlip-2
+pair_style mlip load_from=pot.almtp   #for mlip-3
+pair_coeff * *
+
+#----------settings------------------------------------------------------------------
+compute peatom all pe/atom 
+compute speatom all reduce sum c_peatom 
+
+
+minimize ${etol} ${ftol} ${maxiter} ${maxeval}
+reset_timestep 0
+#-----------Equlibration----------------------------
+timestep 0.002  #unit ps 
+velocity all create ${Temp} 12345 mom yes rot no 
+
+#fix 2 all npt temp ${Temp} ${Temp} 0.1 iso 0.0 0.0 2
+fix 2 all nvt temp ${Temp} ${Temp} 0.2 
+thermo 100
+thermo_style custom step lx ly lz press pxx pyy pzz pe temp
+dump   1 all custom 100 ${sim}/dump.nb id type x y z fx fy fz 
+fix output1 all print 100 "$t $T $p ${KE} ${PE} $E" file ${sim}/output1.txt
+run ${Eq_run}
+write_data md_contcar.cfg
+unfix 2
+unfix output1
+undump 1
+print "Equilibration done"
+
+
